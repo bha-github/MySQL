@@ -1,0 +1,526 @@
+CEIL - returns int, after rounding of float
+AVG - returns float
+REPLACE(col, char to be replaced, new char to be put)
+ROUND(sum(col), 2) returns float
+CONCAT takes multiple args and used to return formated output
+
+-----------median calculation
+
+SET @rowindex := -1;
+ 
+SELECT
+   round(AVG(s.LAT_N),4)
+FROM
+   (SELECT @rowindex:=@rowindex + 1 AS rowindex,
+           station.LAT_N AS LAT_N
+    FROM station
+    ORDER BY station.LAT_N) AS s
+WHERE
+s.rowindex IN (FLOOR(@rowindex / 2), CEIL(@rowindex / 2));
+
+-----------variable delcaration and cases in SQL
+
+select 
+    @currentNode := N, ``
+    Case 
+        when P is NULL then 'Root' 
+        when (SELECT P from BST where P = @currentNode limit 1) = @currentNode then 'Inner'
+        else 'Leaf'
+    end as nodeType
+from BST
+order by N;
+
+----------- inter dependent tables overall count 
+
+SELECT 
+    C.company_code,
+		C.founder,
+		COUNT(DISTINCT LM.lead_manager_code) AS lead_manager_count,
+		COUNT(DISTINCT SM.senior_manager_code) AS senior_manager_count,
+		COUNT(DISTINCT M.manager_code) AS manager_count,
+		COUNT(DISTINCT E.employee_code) AS employee_count
+	FROM Company C
+	LEFT JOIN Lead_Manager LM ON C.company_code = LM.company_code
+	LEFT JOIN Senior_Manager SM ON C.company_code = SM.company_code
+	LEFT JOIN Manager M ON C.company_code = M.company_code
+	LEFT JOIN Employee E ON C.company_code = E.company_code
+	GROUP BY C.company_code, C.founder
+	ORDER BY C.company_code ASC;
+
+-------------- intermediate joins (joining conditions)
+
+select 
+    case 
+        when grades.grade > 7 then students.name
+        else NULL
+    end,
+grades.grade, students.marks
+from students
+join grades on students.marks between grades.min_mark and grades.max_mark
+order by grade desc, name asc;
+
+------------- multiple table join and group by having(query structure)
+SELECT 
+   h.hacker_id ,  h.name
+FROM
+    Hackers h
+        JOIN
+    Submissions s ON h.hacker_id = s.hacker_id
+        JOIN
+    Challenges c ON c.challenge_id = s.challenge_id
+        JOIN
+    Difficulty d ON d.difficulty_level = c.difficulty_level 
+WHERE
+    d.score = s.score
+GROUP BY h.hacker_id , h.name
+HAVING COUNT(*) > 1
+order by COUNT(*) desc,  h.hacker_id asc;
+------------- partition by and over method
+SELECT 
+    w.id, 
+    wp.age, 
+    w.coins_needed, 
+    w.power 
+FROM Wands w 
+JOIN Wands_Property wp ON w.code = wp.code 
+WHERE wp.is_evil = 0 
+  AND w.coins_needed = (
+      SELECT MIN(w2.coins_needed) 
+      FROM Wands w2 
+      JOIN Wands_Property wp2 ON w2.code = wp2.code 
+      WHERE wp2.is_evil = 0 
+        AND wp2.age = wp.age 
+        AND w2.power = w.power
+  )
+ORDER BY w.power DESC, wp.age DESC;
+----------------- to find max count and if two people have same max (leading the board)
+WITH temp_table AS (
+    SELECT 
+        h.hacker_id, 
+        h.name, 
+        COUNT(*) AS ch_count
+    FROM Hackers h
+    JOIN Challenges c ON c.hacker_id = h.hacker_id
+    GROUP BY h.hacker_id, h.name
+)
+SELECT hacker_id, name, ch_count 
+FROM temp_table a
+WHERE 
+    a.ch_count = (SELECT MAX(c.ch_count) FROM temp_table c)
+    OR (SELECT COUNT(*) FROM temp_table b WHERE a.ch_count = b.ch_count) = 1
+ORDER BY a.ch_count DESC, a.hacker_id;
+-------------
+SELECT 
+    H.hacker_id, H.name, SUM(S.max_score)
+FROM
+    Hackers H
+        JOIN
+    (SELECT 
+        challenge_id, hacker_id, MAX(score) max_score
+    FROM
+        Submissions
+    GROUP BY challenge_id , hacker_id) s ON s.hacker_id = H.hacker_id
+GROUP BY H.hacker_id , H.name
+HAVING SUM(S.max_score) != 0
+ORDER BY SUM(S.max_score) DESC , H.hacker_id;
+----------- the alias that you are using is very important during your selection of group by and select (section)
+
+example 
+select 
+    s.student_id,
+    s.student_name,
+    sub.subject_name,
+    COUNT(e.student_id) AS attended_exams
+from students s
+cross join subjects sub
+left join examinations e on (s.student_id = e.student_id and sub.subject_name = e.subject_name)
+group by s.student_id,s.student_name, sub.subject_name
+ORDER BY s.student_id, sub.subject_name;
+---------- the first query that i wrote by myself
+select 
+    s.machine_id,
+    round(avg(s.time),3) as processing_time
+from (
+select 
+    a1.machine_id,
+    a1.process_id,
+    (a2.timestamp - a1.timestamp) as time
+from Activity a1
+join Activity a2 on (a1.machine_id = a2.machine_id and a1.process_id = a2.process_id and a1.timestamp < a2.timestamp)) as s
+group by s.machine_id;
+------------ if as a function
+select 
+    s.user_id,
+    round(avg(if(c.action='confirmed',1,0)),2) as confirmation_rate
+from signups s
+left join confirmations c on s.user_id = c.user_id
+group by s.user_id
+
+select
+    query_name,
+    round(avg(rating/position),2) as quality,
+    round(sum(if(rating >= 3,0,1))*100/count(rating), 2) as poor_query_percentage
+from queries
+group by query_name
+------------ ifnull function
+select 
+    p.product_id,
+    ifnull(round(sum(p.price*us.units)/sum(us.units),2),0) as average_price
+from prices p 
+left join unitssold us
+on p.product_id = us.product_id and us.purchase_date between p.start_date and p.end_date
+group by p.product_id
+----------- percentage of users
+select 
+    contest_id,
+    round(count(user_id)*100/(select count(*) from users),2) as percentage
+from register
+group by contest_id
+order by percentage desc, contest_id asc;
+------------ select expressions are evaluated
+
+# Write your MySQL query statement below
+SELECT
+    DATE_FORMAT(trans_date, '%Y-%m') AS month,
+    country,
+    COUNT(*) AS trans_count,
+    COUNT(IF(state = 'approved', 1, NULL)) AS approved_count,
+    SUM(amount) AS trans_total_amount,
+    SUM(IF(state = 'approved', amount, 0)) AS approved_total_amount
+FROM
+    Transactions
+GROUP BY
+    month,
+    country
+	
+1. FROM Clause
+MySQL first identifies the table (Transactions) from which the data will be queried.
+The data is loaded into memory for further processing.
+2. WHERE Clause
+Although not present in your query, if there were any conditions specified in the WHERE clause, MySQL would filter rows from the Transactions table based on those conditions.
+3. SELECT Clause (Evaluates Expressions for Columns)
+Expressions like DATE_FORMAT(trans_date, '%Y-%m'), COUNT(*), SUM(amount), and conditional aggregates such as COUNT(IF(state = 'approved', 1, NULL)) and SUM(IF(state = 'approved', amount, 0)) are evaluated.
+The SELECT clause is processed after GROUP BY logically, but the column expressions are prepared here for aggregation.
+4. GROUP BY Clause
+Rows are grouped based on the GROUP BY columns: month (derived from DATE_FORMAT(trans_date, '%Y-%m')) and country.
+For each unique combination of month and country, MySQL aggregates the data using the specified aggregate functions (COUNT, SUM, etc.).
+5. Aggregate Functions
+Within each group, the aggregate functions are computed:
+COUNT(*) calculates the total number of rows in each group.
+COUNT(IF(state = 'approved', 1, NULL)) counts rows with state = 'approved' in each group.
+SUM(amount) computes the total amount for all rows in each group.
+SUM(IF(state = 'approved', amount, 0)) computes the total approved amount in each group.
+6. ORDER BY Clause (Optional)
+If there was an ORDER BY clause, MySQL would now sort the aggregated results based on the specified columns or expressions.
+7. Result Set
+After all processing steps, MySQL returns the final result set with the grouped and aggregated data.
+------------- DATE_FORMAT method
+
+SELECT
+    DATE_FORMAT(trans_date, '%Y-%m') AS month,
+    country,
+    COUNT(*) AS trans_count,
+    COUNT(IF(state = 'approved', 1, NULL)) AS approved_count,
+    SUM(amount) AS trans_total_amount,
+    SUM(IF(state = 'approved', amount, 0)) AS approved_total_amount
+FROM
+    Transactions
+GROUP BY
+    month,
+    country
+	
+----------- substr method
+
+substr(trans_date, 1, 7) as month,
+------------ finding percentage using avg
+
+select
+    round(avg(order_date = customer_pref_delivery_date)*100,2) as immediate_percentage 
+from Delivery 
+where (customer_id,order_date) in ( select customer_id, min(order_date) from Delivery group by customer_id)
+------------DATE_SUB(date, INTERVAL value interval) method
+SELECT DATE_SUB("2017-06-15", INTERVAL 10 DAY);
+-----------DATEDIFF method
+SELECT 
+    ROUND(SUM(if(DATEDIFF(event_date, min_event_date) = 1,1, 0)) / COUNT(DISTINCT player_id), 2) AS fraction
+FROM (
+    SELECT 
+        player_id,
+        event_date,
+        MIN(event_date) OVER (PARTITION BY player_id) AS min_event_date
+    FROM activity
+) AS activity_with_min_date
+
+---------- taking the mininum of the value of col - example take the earliest year entry (first year)
+# Write your MySQL query statement below
+SELECT product_id, first_year, quantity, price
+FROM (
+    SELECT 
+        product_id,
+        year AS first_year,
+        quantity,
+        price,
+        RANK() OVER (PARTITION BY product_id ORDER BY year) AS row_num
+    FROM Sales
+) subquery
+WHERE row_num = 1
+---------- fetch the value where the count is given_count
+select (
+    select num as num
+    from MyNumbers
+    group by num
+    having count(num) = 1
+    order by num desc
+    limit 1
+) as num
+------------- grouping dates
+
+WITH GroupedTasks AS (
+    SELECT 
+        Task_ID,
+        Start_Date,
+        End_Date,
+        DATE_SUB(End_Date, INTERVAL ROW_NUMBER() OVER (ORDER BY End_Date) DAY) AS group_id
+    FROM Projects
+),
+ProjectsGrouped AS (
+    SELECT 
+        MIN(Start_Date) AS Start_Date,
+        MAX(End_Date) AS End_Date,
+        DATEDIFF(MAX(End_Date), MIN(Start_Date)) AS duration
+    FROM GroupedTasks
+    GROUP BY group_id
+)
+SELECT Start_Date, End_Date
+FROM ProjectsGrouped
+ORDER BY duration ASC, Start_Date ASC;
+------------ LAG function
+LAG (scalar_expression [, offset [, default ]])     OVER ( [ partition_by_clause ] order_by_clause )
+
+Where: 
+
+scalar_expression – The value to be returned based on the specified offset.
+offset – The number of rows back from the current row from which to obtain a value. If not specified, the default is 1.
+default – default is the value to be returned if offset goes beyond the scope of the partition. If a default value is not specified, NULL is returned.
+partition_by_clause: An optional clause that divides the result set into partitions. The LAG() function is applied to each partition separately.
+order_by_clause: The order of the rows within each partition. This is mandatory and must be specified.
+
+Why Use the LAG() Function?
+Comparing Rows: Helps compare the current row with a previous row’s data.
+Trend Analysis: Useful for analyzing changes in values, like stock prices, sales figures, or other time-series data.
+Finding Differences: Calculate the difference between consecutive rows in terms of time, quantity, or any other metric.
+
+SELECT Organisation, [Year], Revenue,
+LAG (Revenue, 1, 0) 
+OVER (PARTITION BY Organisation ORDER BY [Year]) AS PrevYearRevenue  
+FROM Org 
+ORDER BY Organisation, [Year]; 
+
+three consecutive entry of same number
+
+With LogsLegs AS (
+    SELECT
+        id,
+        num,
+        LAG(num, 1) OVER (ORDER BY id) as prev_num,
+        LAG(num, 2) OVER (ORDER BY id) as prev_prev_num
+    FROM
+        Logs
+)
+
+SELECT
+    distinct(num) AS ConsecutiveNums
+FROM
+    LogsLegs
+WHERE
+    num = prev_num
+AND num = prev_prev_num
+------------- sumations by ordered rows 
+WITH
+  AccumulatedQueue AS (
+    SELECT
+      person_name,
+      SUM(weight) OVER(ORDER BY turn) AS accumulated_weight
+    FROM Queue
+  )
+-- select * from AccumulatedQueue
+SELECT person_name
+FROM AccumulatedQueue
+WHERE accumulated_weight <= 1000
+ORDER BY accumulated_weight DESC
+LIMIT 1;
+---------------- limit with offset
+Suppose we have to find 4th highest salary 
+
+SELECT * FROM employee 
+WHERE salary= (SELECT DISTINCT(salary) 
+FROM employee ORDER BY salary DESC LIMIT 3,1);
+
+skip first 3 and return 1 row
+----------- rabk over some col
+# Write your MySQL query statement below
+WITH salary_rnk as (
+    SELECT *, DENSE_RANK() OVER (order by salary DESC) as rnk
+    FROM Employee)
+
+SELECT ( SELECT salary FROM salary_rnk WHERE rnk=2 LIMIT 1) as SecondHighestSalary
+--------- group concat
+
+Basically, to concat a group of elements, we use GROUP_CONCAT() aggregate function with separator.
+
+select 
+    sell_date,
+    count(product) as num_sold,
+    GROUP_CONCAT(distinct(product) ORDER BY product SEPARATOR  ',') as products
+from
+(select 
+    sell_date,
+    product
+from activities 
+group by sell_date, product) u_a
+group by sell_date
+order by sell_date;
+------------validating email using REGEXP
+
+SELECT
+  *
+FROM
+  Users
+WHERE
+  mail REGEXP '^[a-zA-Z][a-zA-Z0-9_.-]*@leetcode[.]com$';
+ ----------- lag and lead
+ LAG(student) OVER (ORDER BY id):
+Fetches the student value from the previous row, ordered by id.
+LEAD(student) OVER (ORDER BY id):
+Fetches the student value from the next row, ordered by id.
+---------------- **************
+select toprater.name as results
+from
+(select
+    r.user_id,
+    u.name,
+    count(r.movie_id) as moviescount
+from movierating r
+natural join users u
+group by r.user_id
+order by moviescount desc, u.name asc
+limit 1) toprater
+union all
+select topmovie.title as results
+from (
+select 
+    movie_id,
+    title,
+    avg(rating) as avgrating
+from movierating 
+natural join movies
+where created_at like '2020-02%'
+group by movie_id
+order by avgrating desc, title asc
+limit 1) topmovie;
+
+-----------------****************
+with temptable as (
+    select *
+    from movierating
+    natural join users
+    natural join movies
+)
+
+select topuser.name as results 
+from (select 
+    name,
+    count(name) as usercount
+from temptable
+group by user_id
+order by usercount desc, name asc
+limit 1) topuser
+
+union all
+
+select topmovie.title as results 
+from (select 
+    title,
+    avg(rating) as avgrating
+from temptable
+where created_at like '2020-02%'
+group by title
+order by avgrating desc, title asc
+limit 1) as topmovie
+
+-------------------*********************
+--------------- order by - aggregation functions can be used in order by clause itself
+
+with temptable as (
+    select *
+    from movierating
+    natural join users
+    natural join movies
+)
+
+(select name as results 
+from temptable
+group by name
+order by count(name) desc, name asc
+limit 1)
+
+union all
+
+(select  title as results
+from temptable
+where created_at like '2020-02%'
+group by title
+order by avg(rating) desc, title asc
+limit 1)
+-------------- delimiters and procedures
+DELIMITER $$
+
+CREATE PROCEDURE printPattern()
+BEGIN
+    DECLARE i INT DEFAULT 20;
+    
+    WHILE i>0 DO
+        SELECT IF(i=1, "*", REPEAT("* ", i));
+        SET i = i-1;
+    END WHILE;
+END$$
+
+DELIMITER ;
+
+CALL printPattern();
+---------- procedures if leave loop
+print prime numbers
+
+DELIMITER **
+
+CREATE PROCEDURE primeNumbers()
+BEGIN
+    DECLARE n INT DEFAULT 3;
+    DECLARE result VARCHAR(2000) DEFAULT "2";
+    
+    loop1: WHILE n<=1000 DO
+        SET @i = 2;
+        SET @isPrime = 1;
+        
+        loop2: WHILE @i<=CEIL(n/2) DO
+            IF n % @i = 0 THEN
+                SET @isPrime = 0;
+                LEAVE loop2;
+            END IF;
+            
+            SET @i = @i + 1;
+        END WHILE loop2;
+        
+        IF @isPrime = 1 THEN
+            SET result = CONCAT(result, "&", n);
+        END IF;
+        
+        SET n = n + 1;
+    END WHILE loop1;
+    
+    SELECT result;
+END**
+
+DELIMITER ;
+
+CALL primeNumbers()
